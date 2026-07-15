@@ -76,11 +76,6 @@ don't need.
 static TABLE: Vegosh = Vegosh::new();
 ```
 
-<<<<<<< HEAD
-Do not construct this as a bare local (`let table = Vegosh::new()`). At
-128 MiB it will overflow a typical thread stack. Use `static`, `Box::new`,
-or a heap-backed lazy static.
-=======
 ### Initializing
 
 A newly constructed table is already empty, so calling `init()` is only
