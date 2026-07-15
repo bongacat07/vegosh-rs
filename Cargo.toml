@@ -2,12 +2,10 @@
 name = "vegosh"
 version = "1.0.0"
 edition = "2024"
-<<<<<<< HEAD
-=======
 description = "A fixed-capacity, statically allocated Robin Hood hash table."
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/bongacat07/vegosh-rs"
-homepage = "https://github.com/bongacat07/vegosh-rs"
+repository = "https://github.com/<your-username>/vegosh"
+homepage = "https://github.com/<your-username>/vegosh"
 documentation = "https://docs.rs/vegosh"
 readme = "README.md"
 
@@ -21,7 +19,6 @@ keywords = [
 categories = [
     "data-structures",
 ]
->>>>>>> a8a18dd (Modified API to return Option<> and Error Enums)
 
 [dependencies]
 rapidhash = "4.4.2"

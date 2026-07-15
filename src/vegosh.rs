@@ -64,13 +64,19 @@ pub struct NotFound;
 fn hash_key(key: &[u8; 16]) -> u64 {
     rapidhash_v3_seeded(key, &DEFAULT_RAPID_SECRETS)
 }
+// Resets the global table to empty and returns a pointer to it.
+// Call once at startup before using insert/get/delete_key.
 
 #[inline(always)]
 pub fn init(table: &mut Vegosh) {
     table.count = 0;
     table.slots.fill(Slot::EMPTY);
 }
-
+// Inserts a key/value pair, or updates the value if the key already exists.
+// Uses Robin Hood hashing with linear probing: when probing finds a slot
+// that's "richer" (closer to its ideal index) than the incoming entry,
+// the two swap places, so no single key ever ends up displaced too far.
+//
 #[inline(always)]
 pub fn insert(
     table: &mut Vegosh,
@@ -85,8 +91,11 @@ pub fn insert(
     }
 
     let hash = hash_key(key);
-    let mut index: u32 = (hash as u32) & MASK;
+    let mut index: u32 = (hash as u32) & MASK; // ideal slot for this key, before any probing
 
+    // Build the entry we're trying to place. This may get swapped out for
+    // a "poorer" entry mid-probe (see the Robin Hood swap below), so it's
+    // a mutable local, not written directly into the table yet.
     let mut incoming = Slot {
         key: *key,
         value: *value,
@@ -98,6 +107,8 @@ pub fn insert(
     };
 
     loop {
+        //Prefetch two slots ahead so the next probe iteration's cache line
+        // is already in flight by the time we need it.
         #[cfg(target_arch = "x86_64")]
         unsafe {
             use core::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
@@ -112,19 +123,24 @@ pub fn insert(
         }
 
         let slot = &mut table.slots[index as usize];
-
+        // Found an empty slot: place the entry here and we're done.
         if slot.status == EMPTY {
             *slot = incoming;
             table.count += 1;
             return Ok(InsertOutcome::Inserted);
         }
-
+        // Check hash first (cheap), only fall through to the full key
+        // comparison (memcmp) if the hash actually matches.
         if slot.hash == incoming.hash && slot.key == incoming.key {
+            // Same key already exists: update its value in place.
             slot.value = incoming.value;
             slot.value_len = incoming.value_len;
             return Ok(InsertOutcome::Updated);
         }
-
+        // Robin Hood swap: if the entry we're carrying has traveled further
+        // from its ideal slot than the one currently occupying this slot,
+        // steal this slot and carry the displaced entry onward instead.
+        // This keeps probe distances balanced across the whole table.
         if incoming.probe_dist > slot.probe_dist {
             std::mem::swap(slot, &mut incoming);
         }
@@ -133,7 +149,12 @@ pub fn insert(
         incoming.probe_dist += 1;
     }
 }
-
+// Looks up a key and copies its value into out_value / out_value_len.
+//
+// The probe_distance early-exit below is what makes Robin Hood lookups
+// fast: if we've probed further than the slot in front of us has ever
+// been displaced, the key we're looking for cannot exist anywhere later
+// in the probe sequence, so we can stop instead of scanning the whole table.
 #[inline(always)]
 pub fn get(table: &Vegosh, key: &[u8; 16]) -> Option<([u8; 32], u8)> {
     let hash = hash_key(key);
@@ -155,15 +176,16 @@ pub fn get(table: &Vegosh, key: &[u8; 16]) -> Option<([u8; 32], u8)> {
         }
 
         let slot = &table.slots[index as usize];
-
+        // Hit an empty slot before finding the key: it's not in the table.
         if slot.status == EMPTY {
             return None;
         }
-
+        // Found it — copy out the value and how much of it is valid.
         if slot.hash == hash && slot.key == *key {
             return Some((slot.value, slot.value_len));
         }
-
+        // Robin Hood early-exit: this slot is "richer" than we've traveled,
+        // so our key can't be further down the probe sequence.
         if probe_dist > slot.probe_dist {
             return None;
         }
@@ -172,17 +194,21 @@ pub fn get(table: &Vegosh, key: &[u8; 16]) -> Option<([u8; 32], u8)> {
         probe_dist += 1;
     }
 }
+// Removes a key from the table using backward-shift deletion, which keeps
+// the Robin Hood probe-distance invariant intact without needing tombstones.
+//
+// Phase 1: probe forward to find the slot holding this key (same logic as get()).
+// Phase 2: shift each subsequent slot backward by one, decrementing its
+// probe_distance, until we hit an empty slot or a slot that's already at
+// its ideal position (probe_distance == 0) — that's where the "hole" closes.
+//
 
 #[inline(always)]
-<<<<<<< HEAD
-pub fn delete_key(table: &mut Vegosh, key: &[u8; 16]) -> i32 {
-=======
 pub fn delete(table: &mut Vegosh, key: &[u8; 16]) -> Result<(), NotFound> {
->>>>>>> a8a18dd (Modified API to return Option<> and Error Enums)
     let hash = hash_key(key);
     let mut index: u32 = (hash as u32) & MASK;
     let mut probe_dist: u16 = 0;
-
+    // Phase 1: locate the slot holding this key.
     loop {
         #[cfg(target_arch = "x86_64")]
         unsafe {
@@ -214,7 +240,8 @@ pub fn delete(table: &mut Vegosh, key: &[u8; 16]) -> Result<(), NotFound> {
         index = (index + 1) & MASK;
         probe_dist += 1;
     }
-
+    // Phase 2: backward-shift every following displaced entry into the gap
+    // we just opened, one slot at a time, until the chain naturally ends.
     loop {
         let next = (index + 1) & MASK;
 
@@ -233,12 +260,13 @@ pub fn delete(table: &mut Vegosh, key: &[u8; 16]) -> Result<(), NotFound> {
     table.count -= 1;
     Ok(())
 }
-
+// Returns the current number of occupied entries in the table.
 #[inline(always)]
 pub fn size(table: &Vegosh) -> u32 {
     table.count
 }
-
+// Wipes every slot back to EMPTY and resets the entry count to zero.
+// Table remains usable afterward — this doesn't free or reallocate anything.
 #[inline(always)]
 pub fn clear(table: &mut Vegosh) {
     table.slots.fill(Slot::EMPTY);
