@@ -181,7 +181,7 @@ unsafe {
 | `init(table)` | Reset a table to empty. |
 | `insert(table, key, value, value_len)` | Insert or update. Returns `0` on insert, `1` on update, `-1` if `MAX_KEYS` reached. |
 | `get(table, key, out_value, out_value_len)` | Lookup. Returns `0` on hit, `-1` on miss. |
-| `delete_key(table, key)` | Remove a key. Returns `0` on success, `-1` if not found. |
+| `delete(table, key)` | Remove a key. Returns `0` on success, `-1` if not found. |
 | `size(table)` | Current key count. |
 | `clear(table)` | Reset a table to empty (same as `init`). |
 
