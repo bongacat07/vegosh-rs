@@ -172,7 +172,7 @@ unsafe {
     println!("entries: {}", size(&TABLE));
 }
 ```
->>>>>>> a8a18dd (Modified API to return Option<> and Error Enums)
+
 
 ## API
 
