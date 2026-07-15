@@ -48,6 +48,18 @@ impl Vegosh {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InsertOutcome {
+    Inserted,
+    Updated,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TableFull;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NotFound;
+
 #[inline(always)]
 fn hash_key(key: &[u8; 16]) -> u64 {
     rapidhash_v3_seeded(key, &DEFAULT_RAPID_SECRETS)
@@ -60,11 +72,16 @@ pub fn init(table: &mut Vegosh) {
 }
 
 #[inline(always)]
-pub fn insert(table: &mut Vegosh, key: &[u8; 16], value: &[u8; 32], value_len: u8) -> i32 {
+pub fn insert(
+    table: &mut Vegosh,
+    key: &[u8; 16],
+    value: &[u8; 32],
+    value_len: u8,
+) -> Result<InsertOutcome, TableFull> {
     assert!((value_len as usize) <= VALUE_SIZE);
 
     if table.count >= MAX_KEYS {
-        return -1;
+        return Err(TableFull);
     }
 
     let hash = hash_key(key);
@@ -99,13 +116,13 @@ pub fn insert(table: &mut Vegosh, key: &[u8; 16], value: &[u8; 32], value_len: u
         if slot.status == EMPTY {
             *slot = incoming;
             table.count += 1;
-            return 0;
+            return Ok(InsertOutcome::Inserted);
         }
 
         if slot.hash == incoming.hash && slot.key == incoming.key {
             slot.value = incoming.value;
             slot.value_len = incoming.value_len;
-            return 1;
+            return Ok(InsertOutcome::Updated);
         }
 
         if incoming.probe_dist > slot.probe_dist {
@@ -118,12 +135,7 @@ pub fn insert(table: &mut Vegosh, key: &[u8; 16], value: &[u8; 32], value_len: u
 }
 
 #[inline(always)]
-pub fn get(
-    table: &Vegosh,
-    key: &[u8; 16],
-    out_value: &mut [u8; 32],
-    out_value_len: &mut u8,
-) -> i32 {
+pub fn get(table: &Vegosh, key: &[u8; 16]) -> Option<([u8; 32], u8)> {
     let hash = hash_key(key);
     let mut index: u32 = (hash as u32) & MASK;
     let mut probe_dist: u16 = 0;
@@ -145,17 +157,15 @@ pub fn get(
         let slot = &table.slots[index as usize];
 
         if slot.status == EMPTY {
-            return -1;
+            return None;
         }
 
         if slot.hash == hash && slot.key == *key {
-            *out_value = slot.value;
-            *out_value_len = slot.value_len;
-            return 0;
+            return Some((slot.value, slot.value_len));
         }
 
         if probe_dist > slot.probe_dist {
-            return -1;
+            return None;
         }
 
         index = (index + 1) & MASK;
@@ -164,7 +174,11 @@ pub fn get(
 }
 
 #[inline(always)]
+<<<<<<< HEAD
 pub fn delete_key(table: &mut Vegosh, key: &[u8; 16]) -> i32 {
+=======
+pub fn delete(table: &mut Vegosh, key: &[u8; 16]) -> Result<(), NotFound> {
+>>>>>>> a8a18dd (Modified API to return Option<> and Error Enums)
     let hash = hash_key(key);
     let mut index: u32 = (hash as u32) & MASK;
     let mut probe_dist: u16 = 0;
@@ -186,7 +200,7 @@ pub fn delete_key(table: &mut Vegosh, key: &[u8; 16]) -> i32 {
         let slot = &table.slots[index as usize];
 
         if slot.status == EMPTY {
-            return -1;
+            return Err(NotFound);
         }
 
         if slot.hash == hash && slot.key == *key {
@@ -194,7 +208,7 @@ pub fn delete_key(table: &mut Vegosh, key: &[u8; 16]) -> i32 {
         }
 
         if slot.probe_dist < probe_dist {
-            return -1;
+            return Err(NotFound);
         }
 
         index = (index + 1) & MASK;
@@ -217,7 +231,7 @@ pub fn delete_key(table: &mut Vegosh, key: &[u8; 16]) -> i32 {
     }
 
     table.count -= 1;
-    0
+    Ok(())
 }
 
 #[inline(always)]

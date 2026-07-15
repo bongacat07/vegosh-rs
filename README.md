@@ -76,9 +76,108 @@ don't need.
 static TABLE: Vegosh = Vegosh::new();
 ```
 
+<<<<<<< HEAD
 Do not construct this as a bare local (`let table = Vegosh::new()`). At
 128 MiB it will overflow a typical thread stack. Use `static`, `Box::new`,
 or a heap-backed lazy static.
+=======
+### Initializing
+
+A newly constructed table is already empty, so calling `init()` is only
+necessary when reusing an existing table.
+
+```rust
+use vegosh::{init, Vegosh};
+
+static mut TABLE: Vegosh = Vegosh::new();
+
+unsafe {
+    init(&mut TABLE);
+}
+```
+
+### Inserting
+
+Keys are fixed at 16 bytes and values at 32 bytes. value_len specifies how
+many bytes of the value are logically valid.
+```rust
+use vegosh::{insert, InsertOutcome, TableFull, Vegosh};
+
+static mut TABLE: Vegosh = Vegosh::new();
+
+let key = *b"0123456789abcdef";
+
+let mut value = [0u8; 32];
+value[..11].copy_from_slice(b"hello world");
+
+unsafe {
+    match insert(&mut TABLE, &key, &value, 11) {
+        Ok(InsertOutcome::Inserted) => println!("inserted"),
+        Ok(InsertOutcome::Updated) => println!("updated existing key"),
+        Err(TableFull) => println!("table is full"),
+    }
+}
+```
+### Looking up a value
+
+```rust
+use vegosh::{get, Vegosh};
+
+static mut TABLE: Vegosh = Vegosh::new();
+
+let key = *b"0123456789abcdef";
+
+unsafe {
+    match get(&TABLE, &key) {
+        Some((value, len)) => {
+            println!("{}", String::from_utf8_lossy(&value[..len as usize]));
+        }
+        None => println!("key not found"),
+    }
+}
+```
+
+### Removing a key
+
+```rust
+use vegosh::{delete, NotFound, Vegosh};
+
+static mut TABLE: Vegosh = Vegosh::new();
+
+let key = *b"0123456789abcdef";
+
+unsafe {
+    match delete(&mut TABLE, &key) {
+        Ok(()) => println!("removed"),
+        Err(NotFound) => println!("key not found"),
+    }
+}
+```
+
+### Clearing the table
+
+```rust
+use vegosh::{clear, Vegosh};
+
+static mut TABLE: Vegosh = Vegosh::new();
+
+unsafe {
+    clear(&mut TABLE);
+}
+```
+
+### Querying the number of entries
+
+```rust
+use vegosh::{size, Vegosh};
+
+static mut TABLE: Vegosh = Vegosh::new();
+
+unsafe {
+    println!("entries: {}", size(&TABLE));
+}
+```
+>>>>>>> a8a18dd (Modified API to return Option<> and Error Enums)
 
 ## API
 
